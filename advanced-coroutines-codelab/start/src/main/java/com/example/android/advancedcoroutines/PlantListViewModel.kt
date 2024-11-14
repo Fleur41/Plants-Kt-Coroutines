@@ -59,6 +59,7 @@ class PlantListViewModel internal constructor(
      */
     private val growZone = MutableLiveData<GrowZone>(NoGrowZone)
 
+    val plantsUsingFlow: LiveData<List<Plant>> = plantRepository.plantsFlow.asLiveData()
     /**
      * A list of plants that updates based on the current filter.
      */
@@ -73,6 +74,8 @@ class PlantListViewModel internal constructor(
     init {
         // When creating a new ViewModel, clear the grow zone and perform any related udpates
         clearGrowZoneNumber()
+        // fetch the full plant list
+        launchDataLoad { plantRepository.tryUpdateRecentPlantsCache() }
     }
 
     /**
