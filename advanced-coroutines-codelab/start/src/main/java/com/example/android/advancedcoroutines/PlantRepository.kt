@@ -38,14 +38,26 @@ class PlantRepository private constructor(
      * Fetch a list of [Plant]s from the database.
      * Returns a LiveData-wrapped List of Plants.
      */
-    val plants = plantDao.getPlants()
+    val plants: LiveData<List<Olant>> = liveData<List<Plant>>{
+        val plantsLiveData = plantDao.getPlants()
+        val customSortOrder = plantsListSortOrderCache.getOrAwait()
+        emitSource(plantsLiveData.map{ plantList ->
+            plantList.applySort(customSortOrder)
+        })
+    }
 
     /**
      * Fetch a list of [Plant]s from the database that matches a given [GrowZone].
      * Returns a LiveData-wrapped List of Plants.
      */
-    fun getPlantsWithGrowZone(growZone: GrowZone) =
-        plantDao.getPlantsWithGrowZoneNumber(growZone.number)
+    fun getPlantsWithGrowZone(growZone: GrowZone) = liveData{
+        val plantsGrowZoneLiveData = plantDao.getPlantsWithGrowZoneNumber(growZone.number)
+        val customSortOrder = plantsListSortOrderCache.getOrAwait()
+        emitSource(plantsGrowZoneLiveData.map {planList ->
+            plantList.applySort(customSortOrder)
+        })
+    }
+
 
     /**
      * Returns true if we should make a network request.
@@ -89,6 +101,20 @@ class PlantRepository private constructor(
     private suspend fun fetchPlantsForGrowZone(growZone: GrowZone) {
         val plants = plantService.plantsByGrowZone(growZone)
         plantDao.insertAll(plants)
+    }
+
+    private var plantsListSortOrderCache =
+        CacheOnSuccess(onErrorFallBack = {listOf<String>()}){
+            plantService.customPlantSortOrder()
+        }
+
+    private fun List<Plant>.applySort(customSortOrder: List<String>): List<Plant>{
+        return sortedBy {plant ->
+            val positionForItem = customSortOrder.indexOf(plant.plantId).let {order ->
+                if (order > -1) order else Int.MAX_VALUE
+            }
+            ComparablePair(positionForItem, plant.name)
+        }
     }
 
     companion object {
