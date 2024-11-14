@@ -45,12 +45,38 @@ class PlantRepository private constructor(
             plantList.applySort(customSortOrder)
         })
     }
-
+    private val custormSortFlow = flow{emit(plantsListSortOrderCache.getOrAwait())}
+    // Create a flow that calls a single function
+    private val customSortFlow = plantsListSortOrderCache::getOrAwait.asFlow()
     val plantsFlow: Flow<List<Plant>>
         get() = plantDao.getPlantsFlow()
+    // When the result of customSortFlow is available,
+    // this will combine it with the latest value from
+    // the flow above.  Thus, as long as both `plants`
+    // and `sortOrder` are have an initial value (their
+    // flow has emitted at least one value), any change
+    // to either `plants` or `sortOrder`  will call
+    // `plants.applySort(sortOrder)`.
+            .combine(customSortFlow){plants, sortOrder ->
+                plants.applySort(sortOrder)
+            }
+            .flowOn(defaultDispatcher)
+            .conflate()
+
+    // Create a flow that calls a single function
+    private val customSortFlow = plantsListSortOrderCache::getOrAwait.asFlow()
+         {
+            emit(listOf())
+            delay(1500)
+        }
 
     fun getPlantsWithGrowZoneFlow(growZoneNumber: GrowZone): Flow<List<Plant>> {
         return plantDao.getPlantsWithGrowZoneNumberFlow(growZoneNumber.number)
+            .map {plantList ->
+                val sortOrderFromNetwork = plantsListSortOrderCache.getOrAwait()
+                val nextValue = plantList.applyMainSafeSort(sortOrderFromNetwork)
+                nextValue
+            }
     }
 
     /**
