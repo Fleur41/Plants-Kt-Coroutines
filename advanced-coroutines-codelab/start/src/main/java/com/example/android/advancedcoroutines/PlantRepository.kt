@@ -58,7 +58,21 @@ class PlantRepository private constructor(
         })
     }
 
+    @AnyThread
+    suspend fun List<Plant>.applyMainSafeSort(customSortOrder: List<String>) =
+        withContext(defaultDispatcher){
+            this@applyMainSafeSort.applySort(customSortOrder)
+        }
 
+    fun getPlantsWithGrowZone(growZone: GrowZone) =
+        plantDao.getPlantsWithGrowZoneNumber(growZone.number)
+            .switchMap {
+                plantList ->
+                liveData {
+                    val customSortOrder = plantsListSortOrderCache.getOrAwait()
+                    emit(plantList.applyMainSafeSort(customSortOrder))
+                }
+            }
     /**
      * Returns true if we should make a network request.
      */
